@@ -25,6 +25,7 @@ from datahub_agent_context.langchain_tools import build_langchain_tools
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 
+from custom_tools import build_custom_tools
 from goal import GOAL, SYSTEM_PROMPT
 
 load_dotenv()
@@ -43,6 +44,7 @@ def build_agent():
     #    update_description, ...). This is the whole DataHub integration — no MCP
     #    server or client to run; the tools call DataHub directly.
     tools = build_langchain_tools(client, include_mutations=True)
+    tools += build_custom_tools(client)
 
     # 3. Your LLM — the reasoning engine. Swap the provider:model string freely.
     model = init_chat_model(os.environ.get("AGENT_MODEL", DEFAULT_MODEL))

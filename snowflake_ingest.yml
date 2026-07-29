@@ -1,0 +1,22 @@
+source:
+  type: snowflake
+  config:
+    account_id: ${SNOWFLAKE_ACCOUNT}
+    username: ${SNOWFLAKE_USER}
+    password: ${SNOWFLAKE_PASSWORD}
+    warehouse: ${SNOWFLAKE_WAREHOUSE}
+    role: DATAHUB_INGEST_ROLE
+    database_pattern:
+      allow:
+        - "FINANCE_DB"
+    include_usage_stats: false
+    include_table_lineage: false
+    include_view_lineage: false
+    profiling:
+      enabled: false
+
+sink:
+  type: datahub-rest
+  config:
+    server: http://localhost:8080
+    token: ${DATAHUB_GMS_TOKEN}
