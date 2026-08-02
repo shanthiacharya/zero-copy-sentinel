@@ -29,7 +29,7 @@ Run once before `python agent.py`. Safe to re-run — everything is an upsert.
 import argparse
 
 from datahub.sdk import DataHubClient, Dataset, Dashboard, Tag
-from datahub.metadata.urns import DatasetUrn, TagUrn
+from datahub.metadata.urns import ContainerUrn, DatasetUrn, TagUrn
 
 # --- Config: edit these for your demo ---------------------------------------
 
@@ -47,6 +47,14 @@ COPY_LAST_SYNCED = "2026-07-21T02:00:00Z"  # ~55h behind LIVE_LAST_UPDATED
 
 COPY_DATASET_NAME = "finance_db.public.revenue_dashboard_extract"
 DASHBOARD_NAME = "q3_financial_summary"
+
+# The real PUBLIC schema container that the actual Snowflake ingestion of
+# revenue_live_iceberg created. Attaching the copy dataset to this SAME container
+# entity (instead of letting DataHub infer a path from its dotted name string) is
+# what makes both datasets land under one FINANCE_DB folder in the browse tree —
+# matching name text alone isn't enough, since a string-inferred path and a
+# real-container path are different node types to DataHub's browse tree.
+LIVE_SCHEMA_CONTAINER_URN = "urn:li:container:86f5c7c989d95ef73920e03938a2c4e4"
 
 # Tags used by this demo AND by the sentinel's write-back in goal.py.
 # DataHub won't apply a tag that doesn't exist yet, so we create all of them here.
@@ -104,9 +112,11 @@ def enrich_real_live_dataset(client, urn: str) -> None:
 
 
 def seed_copy_dataset(client) -> str:
+    container = client.entities.get(ContainerUrn.from_string(LIVE_SCHEMA_CONTAINER_URN))
     dataset = Dataset(
         platform="snowflake",
         name=COPY_DATASET_NAME,
+        parent_container=container,
         description=(
             "Nightly-ETL'd snapshot of revenue_live_iceberg, materialized for "
             "dashboard performance. NOT zero-copy — drifts from the source "

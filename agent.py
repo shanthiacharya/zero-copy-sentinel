@@ -53,12 +53,37 @@ def build_agent():
     return create_react_agent(model, tools, prompt=SYSTEM_PROMPT)
 
 
+def _truncate(text: str, limit: int = 400) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"... ({len(text) - limit} more chars)"
+
+
+def _print_step(node_name: str, message) -> None:
+    """Print one step of the agent's run as it happens, so a live demo shows
+    the agent thinking instead of a silent terminal until the final report."""
+    if node_name == "agent":
+        tool_calls = getattr(message, "tool_calls", None) or []
+        for call in tool_calls:
+            args = ", ".join(f"{k}={v!r}" for k, v in call["args"].items())
+            print(f"→ calling {call['name']}({_truncate(args, 200)})")
+        if message.content:
+            print(f"\n{message.content}\n")
+    elif node_name == "tools":
+        print(f"  ← {message.name} returned: {_truncate(str(message.content))}")
+
+
 def main():
     agent = build_agent()
     try:
-        result = agent.invoke({"messages": [{"role": "user", "content": GOAL}]})
-        # The agent's final message is its report of what it read, did, and wrote back.
-        print(result["messages"][-1].content)
+        for chunk in agent.stream(
+            {"messages": [{"role": "user", "content": GOAL}]},
+            stream_mode="updates",
+        ):
+            for node_name, update in chunk.items():
+                for message in update.get("messages", []):
+                    _print_step(node_name, message)
     except Exception as e:
         # Fail gracefully instead of dumping a stack trace on screen.
         print(f"\nThe agent stopped early: {e}\n")

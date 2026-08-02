@@ -10,8 +10,17 @@ source:
       allow:
         - "FINANCE_DB"
     include_usage_stats: false
+    # Defaults to True independently of include_usage_stats — also needs
+    # SNOWFLAKE.ACCOUNT_USAGE access, which DATAHUB_INGEST_ROLE doesn't have.
+    include_operational_stats: false
     include_table_lineage: false
-    include_view_lineage: false
+    # use_queries_v2 defaults to True and extracts lineage/usage/query-popularity
+    # from Snowflake's query and access history — all of which lives under
+    # SNOWFLAKE.ACCOUNT_USAGE, which DATAHUB_INGEST_ROLE isn't granted access to.
+    # We don't use any of that (lineage is set manually via the SDK), so turning
+    # it off avoids the ACCOUNT_USAGE permission errors entirely instead of
+    # retrying and timing out on every run.
+    use_queries_v2: false
     profiling:
       enabled: false
 
