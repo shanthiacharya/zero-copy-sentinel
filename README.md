@@ -12,6 +12,8 @@ nothing fails loudly when it drifts.
 
 Built on **LangGraph + DataHub's Agent Context Kit, powered by Claude**.
 
+![Architecture: Snowflake ingests into DataHub; the sentinel agent reads catalog state, writes tags and incidents back, and alerts Slack](assets/architecture-diagram.png)
+
 ## What it catches
 
 **1. Value drift** — a dashboard sits on a materialized copy of a table that also has a
@@ -29,7 +31,8 @@ inside it.
 
 - **`agent.py`** — the skeleton: connects to DataHub, loads the Agent Context Kit's tools
   (`build_langchain_tools`) plus this project's custom tools, wires a LangGraph
-  `create_react_agent`, and runs the goal.
+  `create_react_agent`, and runs the goal — streaming each tool call and result to the
+  terminal as it happens, so you watch the agent think instead of waiting for a final report.
 - **`goal.py`** — the sentinel's actual instructions: a `SYSTEM_PROMPT` (read before you
   act, be conservative, report explicitly even when nothing's wrong) and a `GOAL` that
   runs both drift checks.
@@ -44,8 +47,15 @@ inside it.
 - **`snowflake/`** — SQL to set up a real Snowflake table (`REVENUE_LIVE_ICEBERG`), add a
   `discount_pct` column, then drop it later to trigger genuine schema drift on a real
   warehouse.
-- **`snowflake_ingest.yml`** — DataHub ingestion recipe for pulling that table in via
-  `datahub ingest`.
+- **`snowflake_ingest.yml`** — DataHub ingestion recipe for pulling that table in.
+  Lineage/usage extraction is disabled because it needs `SNOWFLAKE.ACCOUNT_USAGE` access
+  the ingest role doesn't have (lineage is set manually via the SDK instead).
+- **`ingest.sh`** — wrapper that sources `.env` before running `datahub ingest`. The raw
+  command fails with `expandvars.UnboundVariable` in a plain terminal because the recipe's
+  `${SNOWFLAKE_*}` placeholders resolve from real environment variables — use this instead.
+- **`reset_demo.py`** — resets the demo dataset to its pristine state (removes the
+  `stale-copy-risk` tag, restores the description, hard-deletes incidents). Run it between
+  demo takes — the agent's write-backs are real, so a dry run dirties the catalog.
 
 **Every write-back in this project has been independently confirmed against DataHub's raw
 GraphQL API — not just the agent's own self-report.** That includes catching a real bug
@@ -73,10 +83,11 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env      # fill in DATAHUB_GMS_URL, DATAHUB_GMS_TOKEN, ANTHROPIC_API_KEY
-                           # optionally: SNOWFLAKE_*, SLACK_WEBHOOK_URL
+                           # optionally: SNOWFLAKE_*, SLACK_WEBHOOK_URL (all documented there)
 
 python seed_zero_copy_demo.py     # seeds the demo scenario (--mode seeded by default)
 python agent.py                   # runs the sentinel
+python reset_demo.py              # optional: undo the agent's write-backs to re-demo
 ```
 
 To run against a real Snowflake table instead of the fabricated demo data:
@@ -84,11 +95,11 @@ To run against a real Snowflake table instead of the fabricated demo data:
 ```bash
 pip install 'acryl-datahub[snowflake]'
 # run snowflake/01_setup.sql and 02_add_discount_column.sql in Snowsight first
-datahub ingest -c snowflake_ingest.yml
+./ingest.sh                                      # sources .env, then datahub ingest
 python seed_zero_copy_demo.py --mode snowflake   # update LIVE_DATASET_URN to your real URN first
 python agent.py
 # later, to trigger real schema drift:
-#   run snowflake/03_drop_discount_column.sql in Snowsight, then re-run `datahub ingest`
+#   run snowflake/03_drop_discount_column.sql in Snowsight, then re-run ./ingest.sh
 ```
 
 > ⚠️ **Notes**
@@ -97,6 +108,10 @@ python agent.py
 > - DataHub won't apply a **tag that doesn't exist yet** — `seed_zero_copy_demo.py`
 >   creates all the tags this project uses, so run it before `agent.py`.
 > - `notify_slack` fails loudly (not silently) if `SLACK_WEBHOOK_URL` isn't set.
+> - In `--mode snowflake`, the seed script attaches the copy dataset to the real
+>   `FINANCE_DB.PUBLIC` schema container via `LIVE_SCHEMA_CONTAINER_URN` (a deterministic
+>   hash of platform + database + schema). If that lookup 404s on your instance, copy the
+>   container URN from your DataHub UI into `seed_zero_copy_demo.py`.
 
 ## Resources
 
