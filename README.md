@@ -12,6 +12,7 @@ nothing fails loudly when it drifts.
 
 Built on **LangGraph + DataHub's Agent Context Kit, powered by Claude**.
 
+
 ![Architecture: Snowflake ingests into DataHub; the sentinel agent reads catalog state, writes tags and incidents back, and alerts Slack](assets/architecture-diagram.png)
 
 ## What it catches
